@@ -12,23 +12,18 @@ int motorb = 6;
 int motorr = 5;
 int motorf = 3;     
 int led = 13;
-int calib = 0;
-int count = 0;
-int initx;
-int inity;
-int int_cte[2] = {0.0,0.0};
-int cte[2];
-int diff_cte[2];
-int prev_cte[2];
+float initx;
+float inity;
+float int_cte[2] = {0.0,0.0};
+float cte[2];
+float diff_cte[2];
+float prev_cte[2] = {0, 0};
+float prop_cte[2];
 float Acc_angle[2];
 float Gyro_angle[2];
 float Total_angle[2];
-float p[3] = {3.55,0.005,2.05};                       /*p, i ,d*/
-double dp[3] = {1.0,1.0,1.0};
-double tau_p = 0.002;
-double tau_d = 0.00;
-double tau_i = 0.00;  
-int pid[2];/*Change these values looking at what each of these is doing to the calculated angle!  ADD TWIDDLE*/
+float p[3] = {1,0,0};   /*3.55,0.005,2.05*/                    /*p, i ,d*/
+float pid[2];/*Change these values looking at what each of these is doing to the calculated angle!  ADD TWIDDLE*/
 float elapsedTime, time, timePrev;
 int i;
 float rad_to_deg = 180/3.141592654;
@@ -74,7 +69,7 @@ void setup() {
     analogWrite(motorf, 0);
     digitalWrite(led, LOW);
     time = millis();
-    delay(5000);
+    delay(7000);
 
 }
 
@@ -119,50 +114,62 @@ void loop() {
         Total_angle[0] = 0.98 *(Total_angle[0] + Gyro_angle[0]*elapsedTime) + 0.02*Acc_angle[0];
        /*---Y axis angle---*/
         Total_angle[1] = 0.98 *(Total_angle[1] + Gyro_angle[1]*elapsedTime) + 0.02*Acc_angle[1];
-        cte[0] = Total_angle[0];
-        cte[1] = Total_angle[1];
-        prev_cte[0] = p[0] * cte[0];
-        prev_cte[1] = p[0] * cte[1];
-        if(-3 <cte[0] <3)
-        {
-          int_cte[0]= int_cte[0]+(p[1]*cte[0]);  
+        if(time<1000){
+          initx = Total_angle[0];
+          inity = Total_angle[1];
         }
-        if(-3 <cte[1] <3)
-        {
-          int_cte[1]= int_cte[1]+(p[1]*cte[1]);  
+        else{
+          cte[0] = Total_angle[0] - initx;
+          cte[1] = Total_angle[1] - inity;
+          prop_cte[0] = p[0] * cte[0];
+          prop_cte[1] = p[0] * cte[1];
+          if(-3 <cte[0] <3)
+          {
+            int_cte[0]= int_cte[0]+(p[1]*cte[0]);  
+          }
+          if(-3 <cte[1] <3)
+          {
+            int_cte[1]= int_cte[1]+(p[1]*cte[1]);  
+          }
+          
+          diff_cte[0] = p[2]*((cte[0] - prev_cte[0]));/*/elapsedTime);*/
+          diff_cte[1] = p[2]*((cte[1] - prev_cte[1]));/*/elapsedTime);*/
+          
+          pid[0] = prop_cte[0] + int_cte[0] + diff_cte[0];
+          pid[1] = prop_cte[1] + int_cte[1] + diff_cte[1];
+          motormove(pid[0], pid[1]); 
+              /*Add angle stuff over here*/
+         /* vall = int(vall);
+          valb = int(valb);
+          valr = int(valr);
+          valf = int(valf);*/
+          analogWrite(motorl,int(vall));
+          analogWrite(motorb,int(valb));
+          analogWrite(motorr,int(valr));
+          analogWrite(motorf,int(valf));
+          digitalWrite(led, HIGH);
+          //Serial.print("  Back: ");
+          Serial.println(valr);
+          /*Serial.print("  Front: ");
+          Serial.print(valf);
+          Serial.print("  Left: ");
+          Serial.print(vall);
+          Serial.print("  Right: ");
+          Serial.println(valr);*/
+          prev_cte[0] = cte[0];
+          prev_cte[1] = cte[1];
         }
         
-        diff_cte[0] = p[2]*((cte[0] - prev_cte[0]));/*/elapsedTime);*/
-        diff_cte[1] = p[2]*((cte[1] - prev_cte[1]));/*/elapsedTime);*/
-        
-        pid[0] = prev_cte[0] + int_cte[0] + diff_cte[0];
-        pid[1] = prev_cte[1] + int_cte[1] + diff_cte[1];
-        motormove(pid[0], pid[1]); 
-            /*Add angle stuff over here*/
-       /* vall = int(vall);
-        valb = int(valb);
-        valr = int(valr);
-        valf = int(valf);*/
-        analogWrite(motorl,int(vall));
-        analogWrite(motorb,int(valb));
-        analogWrite(motorr,int(valr));
-        analogWrite(motorf,int(valf));
-        digitalWrite(led, HIGH);
-        //Serial.print("  Back: ");
-        Serial.println(valr);
-        /*Serial.print("  Front: ");
-        Serial.print(valf);
-        Serial.print("  Left: ");
-        Serial.print(vall);
-        Serial.print("  Right: ");
-        Serial.println(valr);*/
-        prev_cte[0] = cte[0];
-        prev_cte[1] = cte[1];
 }
+  analogWrite(motorl,0);
+  analogWrite(motorb,0);
+  analogWrite(motorr,0);
+  analogWrite(motorf,0);
+  digitalWrite(led, LOW);
 }
-int motormove(int angle1, int angle2){
-    valr = valr - 0.01 * angle1;                /* Fix the way the angle is calcualted. Max = 255!!!!!!!!!!*/
-    vall = vall + 0.01 * angle1;
+float motormove(float angle1, float angle2){
+    valr = valr + 0.01 * angle1;                /* Fix the way the angle is calcualted. Max = 255!!!!!!!!!!*/
+    vall = vall - 0.01 * angle1;
     valf = valf + 0.01 * angle2;
     valb = valb - 0.01 * angle2;
     
