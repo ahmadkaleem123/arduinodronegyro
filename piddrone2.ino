@@ -22,19 +22,20 @@ float prop_cte[2];
 float Acc_angle[2];
 float Gyro_angle[2];
 float Total_angle[2];
-float p[3] = {1,0,0};   /*3.55,0.005,2.05*/                    /*p, i ,d*/
-float pid[2];/*Change these values looking at what each of these is doing to the calculated angle!  ADD TWIDDLE*/
+float p[3] = {2,0.005,1};   /*3.55,0.005,2.05*/                    /*p, i ,d*/
+float pid[2];
 float elapsedTime, time, timePrev;
 int i;
-float rad_to_deg = 180/3.141592654;
+float rad_to_deg = 180/3.141592654;    
 int b;
+int count = 0;
 /*int first = 0;*/
 /*int right;
 int up;*/
-double vall = 200;
-double valb = 200;
-double valr = 200;
-double valf = 200;
+float vall = 200;
+float valb = 200;
+float valr = 200;
+float valf = 200;
 float angle;
 int first = 0;
 void setup() {
@@ -52,8 +53,6 @@ void setup() {
     
 
     // initialize serial communication
-    // (38400 chosen because it works as well at 8MHz as it does at 16MHz, but
-    // it's really up to you depending on your project)
     Serial.begin(38400);
 
     // initialize device
@@ -69,7 +68,7 @@ void setup() {
     analogWrite(motorf, 0);
     digitalWrite(led, LOW);
     time = millis();
-    delay(7000);
+    delay(5000);
 
 }
 
@@ -80,13 +79,10 @@ void loop() {
         time = millis();
         elapsedTime = (time - timePrev)/1000;
         accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
-        Acc_angle[0] = atan((ay/16384.0)/sqrt(pow((ax/16384.0),2) + pow((az/16384.0),2)))*rad_to_deg;
-         /*---Y---*/
-         Acc_angle[1] = atan(-1*(ax/16384.0)/sqrt(pow((ay/16384.0),2) + pow((az/16384.0),2)))*rad_to_deg;
+        Acc_angle[0] = atan((ay/16384.0)/sqrt(pow((ax/16384.0),2) + pow((az/16384.0),2)))*rad_to_deg;    // X Axis Angle
+         Acc_angle[1] = atan(-1*(ax/16384.0)/sqrt(pow((ay/16384.0),2) + pow((az/16384.0),2)))*rad_to_deg; // Y Axis Angle
     
-        // these methods (and a few others) are also available
-        //accelgyro.getAcceleration(&ax, &ay, &az);
-        //accelgyro.getRotation(&gx, &gy, &gz);
+        
     
       /*  #ifdef OUTPUT_READABLE_ACCELGYRO
             // display tab-separated accel/gyro x/y/z values
@@ -108,19 +104,23 @@ void loop() {
             Serial.write((uint8_t)(gz >> 8)); Serial.write((uint8_t)(gz & 0xFF));
         #endif*/
         Gyro_angle[0] = gx/131.0; 
-       /*---Y---*/
         Gyro_angle[1] = gy/131.0;
-        /*---X axis angle---*/
-        Total_angle[0] = 0.98 *(Total_angle[0] + Gyro_angle[0]*elapsedTime) + 0.02*Acc_angle[0];
-       /*---Y axis angle---*/
-        Total_angle[1] = 0.98 *(Total_angle[1] + Gyro_angle[1]*elapsedTime) + 0.02*Acc_angle[1];
-        if(time<1000){
-          initx = Total_angle[0];
+        Total_angle[0] = 0.98 *(Total_angle[0] + Gyro_angle[0]*elapsedTime) + 0.02*Acc_angle[0];   // X Axis Angle
+        Total_angle[1] = 0.98 *(Total_angle[1] + Gyro_angle[1]*elapsedTime) + 0.02*Acc_angle[1];   // Y Axis Angle
+
+        // Calibration to determine both initial angles at rest 
+        if(count<500){
+          initx = Total_angle[0];     
           inity = Total_angle[1];
+          count++;
         }
         else{
+          // PID Control Calculations
           cte[0] = Total_angle[0] - initx;
           cte[1] = Total_angle[1] - inity;
+          /*Serial.print("Initial");
+          Serial.println(initx);
+          Serial.println(Total_angle[0]);*/
           prop_cte[0] = p[0] * cte[0];
           prop_cte[1] = p[0] * cte[1];
           if(-3 <cte[0] <3)
@@ -134,29 +134,25 @@ void loop() {
           
           diff_cte[0] = p[2]*((cte[0] - prev_cte[0]));/*/elapsedTime);*/
           diff_cte[1] = p[2]*((cte[1] - prev_cte[1]));/*/elapsedTime);*/
-          
-          pid[0] = prop_cte[0] + int_cte[0] + diff_cte[0];
-          pid[1] = prop_cte[1] + int_cte[1] + diff_cte[1];
+
+          // Final PID as a sum of the three components for each axis
+          pid[0] = prop_cte[0] + int_cte[0] + diff_cte[0];   // X Axis
+          pid[1] = prop_cte[1] + int_cte[1] + diff_cte[1];   // Y Axis
           motormove(pid[0], pid[1]); 
-              /*Add angle stuff over here*/
-         /* vall = int(vall);
-          valb = int(valb);
-          valr = int(valr);
-          valf = int(valf);*/
-          analogWrite(motorl,int(vall));
+          analogWrite(motorl,int(vall));     // Giving an analog PWM signal to each of the four motors based on the values calculated by the function motormove.
           analogWrite(motorb,int(valb));
           analogWrite(motorr,int(valr));
           analogWrite(motorf,int(valf));
           digitalWrite(led, HIGH);
-          //Serial.print("  Back: ");
-          Serial.println(valr);
-          /*Serial.print("  Front: ");
+          Serial.print("  Back: ");
+          Serial.print(valb);
+          Serial.print("  Front: ");
           Serial.print(valf);
           Serial.print("  Left: ");
           Serial.print(vall);
           Serial.print("  Right: ");
-          Serial.println(valr);*/
-          prev_cte[0] = cte[0];
+          Serial.println(valr);
+          prev_cte[0] = cte[0];            // The previous cross track error is now assigned to the current for the next cycle of the loop
           prev_cte[1] = cte[1];
         }
         
@@ -168,10 +164,10 @@ void loop() {
   digitalWrite(led, LOW);
 }
 float motormove(float angle1, float angle2){
-    valr = valr + 0.01 * angle1;                /* Fix the way the angle is calcualted. Max = 255!!!!!!!!!!*/
-    vall = vall - 0.01 * angle1;
-    valf = valf + 0.01 * angle2;
-    valb = valb - 0.01 * angle2;
+    valr = valr + 0.01 * angle1 + 0.01 * angle2;                /* Function to determine the next value of pwm output given to each motor based on the value of the pid variable for each axis */
+    vall = vall - 0.01 * angle1 - 0.01 * angle2;
+    valf = valf - 0.01 * angle1 + 0.01 * angle2;
+    valb = valb + 0.01 * angle1 - 0.01 * angle2;
     
     if(valr>255){
        valr = 255;
@@ -185,17 +181,17 @@ float motormove(float angle1, float angle2){
     if(valb>255){
        valb = 255;
     }
-    if(valr<100){
-       valr = 100;
+    if(valr<150){
+       valr = 150;
     }
-    if(vall<100){
-       vall = 100;
+    if(vall<150){
+       vall = 150;
     }
-    if(valf<100){
-       valf = 100;
+    if(valf<150){
+       valf = 150;
     }
-    if(valb<100){
-       valb = 100;
+    if(valb<150){
+       valb = 150;
     }
 }
 
