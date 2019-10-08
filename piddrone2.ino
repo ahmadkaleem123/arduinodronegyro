@@ -67,8 +67,9 @@ void setup() {
     analogWrite(motorr, 0);
     analogWrite(motorf, 0);
     digitalWrite(led, LOW);
-    time = millis();
+    //time = millis();
     delay(5000);
+    time = millis();
 
 }
 
